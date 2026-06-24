@@ -97,7 +97,15 @@ function ClienteForm({inicial,onSave,onCancel}){
     h(Field,{label:'Plan'},h(Sel,{field:'plan',opts:PLANES})),
     h(Field,{label:'Estado'},h(Sel,{field:'estado',opts:ESTADOS})),
     h(Field,{label:'App que usa'},h(Sel,{field:'app',opts:APPS})),
-    h(Field,{label:'Cuota mensual ($)'},h('input',{type:'text',inputMode:'numeric',value:f.cuota,onChange:e=>up('cuota')(e.target.value),placeholder:'ej: 30000',style:inp})),
+    h(Field,{label:'Cuota mensual ($)'},
+      h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}},
+        [50000,40000,30000,22500,15000,7500,3000].map(v=>
+          h('button',{key:v,onClick:()=>up('cuota')(String(v)),style:{padding:'8px 12px',fontSize:'13px',fontWeight:f.cuota===String(v)?'700':'400',borderRadius:'8px',border:'2px solid',color:f.cuota===String(v)?'#fff':'#666',background:f.cuota===String(v)?'#111':'#fff',borderColor:f.cuota===String(v)?'#111':'rgba(0,0,0,0.1)',cursor:'pointer'}},
+            '$'+v.toLocaleString('es-AR')
+          )
+        )
+      )
+    ),
     h(Field,{label:'Día de pago (del mes)'},h('input',{type:'text',inputMode:'numeric',value:f.diaPago,onChange:e=>up('diaPago')(e.target.value),placeholder:'ej: 5',style:inp})),
     h(Field,{label:'Nota (opcional)'},h('textarea',{value:f.nota,onChange:e=>up('nota')(e.target.value),placeholder:'Cualquier info relevante',style:{...inp,minHeight:'60px',resize:'none'}})),
     h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginTop:'8px'}},
