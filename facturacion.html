@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Fuerza T — Gestión</title>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F5F5F5}
+button,input,select,textarea{font-family:inherit;outline:none}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const {useState,useEffect,useRef,useMemo,createElement:h}=React;
+
+// ── CONSTANTES ────────────────────────────────────────────────────────
+const PIN='1234';
+const G='#1D9E75',B='#378ADD',R='#EF4444',O='#F59E0B';
+const card={background:'#fff',border:'1px solid rgba(0,0,0,0.09)',borderRadius:'12px',padding:'14px',marginBottom:'10px'};
+const lbl={fontSize:'10px',color:'#999',fontWeight:'600',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'6px',display:'block'};
+const inp={width:'100%',padding:'10px',border:'1px solid rgba(0,0,0,0.1)',borderRadius:'8px',fontSize:'15px',color:'#111',background:'#fff'};
+
+const PLANES=['Básico','Online','Presencial'];
+const ESTADOS=['Activo','Prospecto','Pausado','Baja'];
+const APPS=['Básica','Personalizada','Ninguna'];
+const ESTADO_COLOR={Activo:G,Prospecto:O,Pausado:'#999',Baja:R};
+
+const SK='ft_clientes';
+const PK='ft_pagos';
+const TK='ft_tareas';
+
+// ── STORAGE ───────────────────────────────────────────────────────────
+function load(key,def){try{const v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch(e){return def;}}
+function save(key,val){localStorage.setItem(key,JSON.stringify(val));}
+
+// ── UTILS ─────────────────────────────────────────────────────────────
+function mesKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function mesLabel(){const d=new Date();return d.toLocaleDateString('es-AR',{month:'long',year:'numeric'});}
+function hoy(){return new Date().getDate();}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+// ── COMPONENTES BASE ──────────────────────────────────────────────────
+function Badge({label,color}){
+  return h('span',{style:{fontSize:'10px',fontWeight:'700',color,background:color+'18',padding:'3px 8px',borderRadius:'20px',letterSpacing:'0.04em'}},label);
+}
+
+function PinScreen({onUnlock}){
+  const [val,setVal]=useState('');
+  const [err,setErr]=useState(false);
+  function check(v){if(v.length<4)return;if(v===PIN){onUnlock();}else{setErr(true);setVal('');setTimeout(()=>setErr(false),1000);}}
+  function press(n){const nv=val+n;setVal(nv);check(nv);}
+  return h('div',{style:{maxWidth:'480px',margin:'0 auto',minHeight:'100vh',background:'#fff',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'40px 24px'}},
+    h('div',{style:{fontSize:'40px',marginBottom:'12px'}},'💪'),
+    h('div',{style:{fontSize:'22px',fontWeight:'800',marginBottom:'4px'}},'Fuerza T'),
+    h('div',{style:{fontSize:'13px',color:'#999',marginBottom:'36px'}},'Gestión de clientes'),
+    h('div',{style:{display:'flex',gap:'12px',marginBottom:'24px'}},
+      [0,1,2,3].map(i=>h('div',{key:i,style:{width:'14px',height:'14px',borderRadius:'50%',background:val.length>i?(err?R:'#111'):'#E0E0E0'}}))
+    ),
+    err&&h('div',{style:{fontSize:'13px',color:R,marginBottom:'16px',fontWeight:'600'}},'PIN incorrecto'),
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'12px',width:'240px'}},
+      [1,2,3,4,5,6,7,8,9,'',0,'←'].map((n,i)=>h('button',{key:i,onClick:()=>n===''?null:n==='←'?setVal(v=>v.slice(0,-1)):press(String(n)),style:{padding:'18px',fontSize:'20px',fontWeight:'700',borderRadius:'12px',border:'none',background:n===''?'transparent':'#F5F5F5',cursor:n===''?'default':'pointer',color:'#111'}},n===''?'':String(n)))
+    )
+  );
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────
+function Modal({title,onClose,children}){
+  return h('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:100,display:'flex',alignItems:'flex-end',justifyContent:'center'}},
+    h('div',{onClick:e=>e.stopPropagation(),style:{background:'#fff',borderRadius:'16px 16px 0 0',width:'100%',maxWidth:'480px',padding:'20px 16px 32px',maxHeight:'85vh',overflowY:'auto'}},
+      h('div',{style:{width:'36px',height:'4px',background:'#E0E0E0',borderRadius:'2px',margin:'0 auto 16px'}}),
+      h('div',{style:{fontSize:'17px',fontWeight:'800',marginBottom:'16px'}},title),
+      children
+    )
+  );
+}
+
+function Field({label,children}){
+  return h('div',{style:{marginBottom:'14px'}},h('label',{style:lbl},label),children);
+}
+
+// ── FORM CLIENTE ──────────────────────────────────────────────────────
+function ClienteForm({inicial,onSave,onCancel}){
+  const def={nombre:'',plan:'Básico',cuota:'',diaPago:'5',estado:'Activo',app:'Básica',nota:''};
+  const [f,setF]=useState(inicial||def);
+  const up=k=>v=>setF(p=>({...p,[k]:v}));
+  function Sel({field,opts}){
+    return h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}},opts.map(o=>
+      h('button',{key:o,onClick:()=>up(field)(o),style:{padding:'8px 14px',fontSize:'13px',fontWeight:f[field]===o?'700':'400',borderRadius:'8px',border:'2px solid',color:f[field]===o?'#fff':'#666',background:f[field]===o?'#111':'#fff',borderColor:f[field]===o?'#111':'rgba(0,0,0,0.1)',cursor:'pointer'}},o)
+    ));
+  }
+  return h('div',null,
+    h(Field,{label:'Nombre'},h('input',{value:f.nombre,onChange:e=>up('nombre')(e.target.value),placeholder:'Nombre del cliente',style:inp,autoFocus:true})),
+    h(Field,{label:'Plan'},h(Sel,{field:'plan',opts:PLANES})),
+    h(Field,{label:'Estado'},h(Sel,{field:'estado',opts:ESTADOS})),
+    h(Field,{label:'App que usa'},h(Sel,{field:'app',opts:APPS})),
+    h(Field,{label:'Cuota mensual ($)'},h('input',{type:'text',inputMode:'numeric',value:f.cuota,onChange:e=>up('cuota')(e.target.value),placeholder:'ej: 30000',style:inp})),
+    h(Field,{label:'Día de pago (del mes)'},h('input',{type:'text',inputMode:'numeric',value:f.diaPago,onChange:e=>up('diaPago')(e.target.value),placeholder:'ej: 5',style:inp})),
+    h(Field,{label:'Nota (opcional)'},h('textarea',{value:f.nota,onChange:e=>up('nota')(e.target.value),placeholder:'Cualquier info relevante',style:{...inp,minHeight:'60px',resize:'none'}})),
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginTop:'8px'}},
+      h('button',{onClick:onCancel,style:{padding:'14px',borderRadius:'10px',border:'1px solid rgba(0,0,0,0.12)',background:'#fff',fontSize:'14px',fontWeight:'600',cursor:'pointer',color:'#666'}},'Cancelar'),
+      h('button',{onClick:()=>f.nombre.trim()&&onSave(f),disabled:!f.nombre.trim(),style:{padding:'14px',borderRadius:'10px',border:'none',background:f.nombre.trim()?'#111':'#ccc',color:'#fff',fontSize:'14px',fontWeight:'700',cursor:f.nombre.trim()?'pointer':'default'}},'Guardar')
+    )
+  );
+}
+
+// ── CLIENTES ──────────────────────────────────────────────────────────
+function Clientes({clientes,pagos,onAdd,onEdit,onPago,mesActual}){
+  const [busca,setBusca]=useState('');
+  const [filtroEstado,setFiltroEstado]=useState('Todos');
+  const filtrados=clientes.filter(c=>{
+    const matchB=c.nombre.toLowerCase().includes(busca.toLowerCase());
+    const matchE=filtroEstado==='Todos'||c.estado===filtroEstado;
+    return matchB&&matchE;
+  }).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const pagosM=pagos[mesActual]||{};
+  const activos=clientes.filter(c=>c.estado==='Activo');
+  const cobrado=activos.filter(c=>pagosM[c.id]).reduce((s,c)=>s+parseFloat(c.cuota||0),0);
+  const esperado=activos.reduce((s,c)=>s+parseFloat(c.cuota||0),0);
+  const deben=activos.filter(c=>!pagosM[c.id]&&parseFloat(c.cuota||0)>0);
+  const vencenHoy=activos.filter(c=>!pagosM[c.id]&&parseInt(c.diaPago)===hoy());
+  return h('div',null,
+    // Resumen
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'10px'}},
+      [{l:'Activos',v:activos.length,c:'#111'},{l:'Cobrado',v:'$'+cobrado.toLocaleString('es-AR'),c:G},{l:'Pendiente',v:'$'+(esperado-cobrado).toLocaleString('es-AR'),c:deben.length>0?R:'#999'}].map((m,i)=>
+        h('div',{key:i,style:{...card,marginBottom:0,textAlign:'center'}},h('div',{style:{fontSize:'15px',fontWeight:'800',color:m.c}},m.v),h('div',{style:{fontSize:'10px',color:'#999',marginTop:'3px'}},m.l))
+      )
+    ),
+    vencenHoy.length>0&&h('div',{style:{...card,background:'#FEF3C7',border:'1px solid #F59E0B',marginBottom:'10px'}},
+      h('div',{style:{fontSize:'12px',fontWeight:'700',color:'#92400E'}},'⚠️ Vencen hoy: '+vencenHoy.map(c=>c.nombre).join(', '))
+    ),
+    // Filtros
+    h('div',{style:{...card,marginBottom:'10px'}},
+      h('input',{value:busca,onChange:e=>setBusca(e.target.value),placeholder:'🔍 Buscar cliente...',style:{...inp,marginBottom:'10px'}}),
+      h('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}},
+        ['Todos',...ESTADOS].map(e=>h('button',{key:e,onClick:()=>setFiltroEstado(e),style:{padding:'5px 12px',fontSize:'11px',fontWeight:filtroEstado===e?'700':'400',borderRadius:'20px',border:'1px solid',color:filtroEstado===e?'#fff':'#999',background:filtroEstado===e?'#111':'#fff',borderColor:filtroEstado===e?'#111':'rgba(0,0,0,0.1)',cursor:'pointer'}},e))
+      )
+    ),
+    // Lista
+    filtrados.map(c=>{
+      const pagado=!!pagosM[c.id];
+      const cuota=parseFloat(c.cuota||0);
+      const esActivo=c.estado==='Activo';
+      const color=ESTADO_COLOR[c.estado]||'#999';
+      return h('div',{key:c.id,style:{...card,cursor:'pointer'},onClick:()=>onEdit(c)},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
+          h('div',{style:{flex:1}},
+            h('div',{style:{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}},
+              h('div',{style:{fontSize:'15px',fontWeight:'700'}},'c'.replace('c',c.nombre)),
+              h(Badge,{label:c.estado,color})
+            ),
+            h('div',{style:{display:'flex',gap:'6px',alignItems:'center'}},
+              h(Badge,{label:c.plan,color:B}),
+              c.app!=='Ninguna'&&h(Badge,{label:c.app,color:'#6B7280'}),
+              c.diaPago&&h('span',{style:{fontSize:'11px',color:'#bbb'}},'Día '+c.diaPago)
+            )
+          ),
+          esActivo&&cuota>0&&h('div',{onClick:e=>{e.stopPropagation();onPago(c);},style:{textAlign:'right',minWidth:'80px'}},
+            pagado
+              ?h('div',{style:{background:'#EAF7F2',borderRadius:'8px',padding:'6px 10px',fontSize:'12px',fontWeight:'700',color:G}},'✓ Pagó')
+              :h('div',{style:{background:'#FFF5F5',borderRadius:'8px',padding:'6px 10px',fontSize:'12px',fontWeight:'700',color:R}},'✗ Debe')
+          )
+        ),
+        c.nota&&h('div',{style:{fontSize:'11px',color:'#999',marginTop:'6px',borderTop:'1px solid rgba(0,0,0,0.05)',paddingTop:'6px'}},c.nota)
+      );
+    }),
+    h('button',{onClick:onAdd,style:{width:'100%',padding:'14px',background:'#111',color:'#fff',border:'none',borderRadius:'12px',fontSize:'15px',fontWeight:'700',cursor:'pointer',marginTop:'4px'}},'+ Nuevo cliente')
+  );
+}
+
+// ── FACTURACIÓN ───────────────────────────────────────────────────────
+function Facturacion({clientes,pagos,onPago,mesActual}){
+  const pagosM=pagos[mesActual]||{};
+  const activos=clientes.filter(c=>c.estado==='Activo'&&parseFloat(c.cuota||0)>0).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const pagaron=activos.filter(c=>pagosM[c.id]);
+  const deben=activos.filter(c=>!pagosM[c.id]);
+  const cobrado=pagaron.reduce((s,c)=>s+parseFloat(c.cuota||0),0);
+  const esperado=activos.reduce((s,c)=>s+parseFloat(c.cuota||0),0);
+  const pct=esperado>0?Math.round(cobrado/esperado*100):0;
+  return h('div',null,
+    h('div',{style:{...card,marginBottom:'10px'}},
+      h('div',{style:{fontSize:'13px',color:'#999',marginBottom:'2px'}},mesLabel()),
+      h('div',{style:{fontSize:'28px',fontWeight:'900',color:G}},'$'+cobrado.toLocaleString('es-AR')),
+      h('div',{style:{fontSize:'13px',color:'#999',marginBottom:'10px'}},'de $'+esperado.toLocaleString('es-AR')+' esperados · '+pct+'%'),
+      h('div',{style:{height:'6px',background:'#F0F0F0',borderRadius:'3px'}},
+        h('div',{style:{height:'100%',width:pct+'%',background:pct>=80?G:pct>=50?O:R,borderRadius:'3px',transition:'width 0.4s'}})
+      ),
+      h('div',{style:{display:'flex',justifyContent:'space-between',marginTop:'8px',fontSize:'12px'}},
+        h('span',{style:{color:G,fontWeight:'700'}},pagaron.length+' pagaron'),
+        h('span',{style:{color:R,fontWeight:'700'}},deben.length+' deben')
+      )
+    ),
+    deben.length>0&&h('div',null,
+      h('div',{style:{fontSize:'12px',fontWeight:'700',color:'#999',marginBottom:'6px',letterSpacing:'0.06em'}},'PENDIENTES'),
+      deben.map(c=>h('div',{key:c.id,style:{...card,display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'},onClick:()=>onPago(c)},
+        h('div',null,h('div',{style:{fontWeight:'700',fontSize:'14px'}},c.nombre),h('div',{style:{fontSize:'11px',color:'#999'}},c.plan+' · $'+parseFloat(c.cuota).toLocaleString('es-AR')+' · Día '+c.diaPago)),
+        h('div',{style:{background:R,color:'#fff',borderRadius:'8px',padding:'6px 12px',fontSize:'12px',fontWeight:'700'}},'Marcar pagado')
+      ))
+    ),
+    pagaron.length>0&&h('div',null,
+      h('div',{style:{fontSize:'12px',fontWeight:'700',color:'#999',marginBottom:'6px',letterSpacing:'0.06em',marginTop:'10px'}},'PAGARON'),
+      pagaron.map(c=>h('div',{key:c.id,style:{...card,display:'flex',justifyContent:'space-between',alignItems:'center',opacity:0.7},onClick:()=>onPago(c)},
+        h('div',null,h('div',{style:{fontWeight:'700',fontSize:'14px'}},c.nombre),h('div',{style:{fontSize:'11px',color:'#999'}},c.plan+' · $'+parseFloat(c.cuota).toLocaleString('es-AR')+' · '+new Date(pagosM[c.id]).toLocaleDateString('es-AR'))),
+        h('div',{style:{background:'#EAF7F2',color:G,borderRadius:'8px',padding:'6px 12px',fontSize:'12px',fontWeight:'700'}},'✓ Pagó')
+      ))
+    )
+  );
+}
+
+// ── TAREAS ────────────────────────────────────────────────────────────
+function Tareas({clientes,tareas,setTareas}){
+  const [nueva,setNueva]=useState('');
+  const [clienteId,setClienteId]=useState('');
+  const pendientes=tareas.filter(t=>!t.done).sort((a,b)=>a.ts-b.ts);
+  const hechas=tareas.filter(t=>t.done);
+  function agregar(){
+    if(!nueva.trim())return;
+    const t=[...tareas,{id:uid(),texto:nueva.trim(),clienteId,done:false,ts:Date.now()}];
+    setTareas(t);save(TK,t);setNueva('');setClienteId('');
+  }
+  function toggle(id){
+    const t=tareas.map(t=>t.id===id?{...t,done:!t.done,donedAt:Date.now()}:t);
+    setTareas(t);save(TK,t);
+  }
+  function borrar(id){const t=tareas.filter(t=>t.id!==id);setTareas(t);save(TK,t);}
+  const activos=clientes.filter(c=>c.estado==='Activo');
+  return h('div',null,
+    h('div',{style:card},
+      h('div',{style:{...lbl,marginBottom:'8px'}},'Nueva tarea'),
+      h('select',{value:clienteId,onChange:e=>setClienteId(e.target.value),style:{...inp,marginBottom:'8px',fontSize:'13px'}},
+        h('option',{value:''},'Sin cliente específico'),
+        activos.map(c=>h('option',{key:c.id,value:c.id},c.nombre))
+      ),
+      h('div',{style:{display:'flex',gap:'8px'}},
+        h('input',{value:nueva,onChange:e=>setNueva(e.target.value),onKeyDown:e=>e.key==='Enter'&&agregar(),placeholder:'Tarea pendiente...',style:{...inp,flex:1}}),
+        h('button',{onClick:agregar,style:{background:'#111',color:'#fff',border:'none',borderRadius:'8px',padding:'10px 16px',fontSize:'14px',fontWeight:'700',cursor:'pointer'}},'+')
+      )
+    ),
+    pendientes.length>0&&h('div',null,
+      h('div',{style:{fontSize:'12px',fontWeight:'700',color:'#999',marginBottom:'6px',letterSpacing:'0.06em'}},pendientes.length+' PENDIENTES'),
+      pendientes.map(t=>{
+        const c=t.clienteId?clientes.find(c=>c.id===t.clienteId):null;
+        return h('div',{key:t.id,style:{...card,display:'flex',gap:'10px',alignItems:'flex-start'}},
+          h('button',{onClick:()=>toggle(t.id),style:{flexShrink:0,width:'22px',height:'22px',borderRadius:'6px',border:'2px solid rgba(0,0,0,0.15)',background:'#fff',cursor:'pointer',marginTop:'1px'}}),
+          h('div',{style:{flex:1}},
+            c&&h('div',{style:{fontSize:'10px',color:B,fontWeight:'700',marginBottom:'2px'}},c.nombre),
+            h('div',{style:{fontSize:'14px',color:'#111'}},t.texto)
+          ),
+          h('button',{onClick:()=>borrar(t.id),style:{background:'none',border:'none',cursor:'pointer',fontSize:'16px',color:'#ddd',padding:'0 4px'}},'×')
+        );
+      })
+    ),
+    hechas.length>0&&h('div',null,
+      h('div',{style:{fontSize:'12px',fontWeight:'700',color:'#ccc',marginBottom:'6px',letterSpacing:'0.06em',marginTop:'10px'}},hechas.length+' COMPLETADAS'),
+      hechas.map(t=>{
+        const c=t.clienteId?clientes.find(c=>c.id===t.clienteId):null;
+        return h('div',{key:t.id,style:{...card,display:'flex',gap:'10px',alignItems:'flex-start',opacity:0.5}},
+          h('button',{onClick:()=>toggle(t.id),style:{flexShrink:0,width:'22px',height:'22px',borderRadius:'6px',border:'none',background:G,cursor:'pointer',marginTop:'1px',color:'#fff',fontSize:'12px',fontWeight:'900'}},'✓'),
+          h('div',{style:{flex:1,textDecoration:'line-through',fontSize:'14px',color:'#999'}},
+            c&&h('span',{style:{fontSize:'10px',color:'#ccc',marginRight:'6px'}},c.nombre),t.texto
+          ),
+          h('button',{onClick:()=>borrar(t.id),style:{background:'none',border:'none',cursor:'pointer',fontSize:'16px',color:'#ddd',padding:'0 4px'}},'×')
+        );
+      })
+    )
+  );
+}
+
+// ── APP ───────────────────────────────────────────────────────────────
+function App(){
+  const [unlocked,setUnlocked]=useState(()=>sessionStorage.getItem('ft_pin')==='ok');
+  const [tab,setTab]=useState('clientes');
+  const [clientes,setClientes]=useState(()=>load(SK,[]));
+  const [pagos,setPagos]=useState(()=>load(PK,{}));
+  const [tareas,setTareas]=useState(()=>load(TK,[]));
+  const [modal,setModal]=useState(null); // null | {tipo:'nuevo'} | {tipo:'editar',cliente}
+  const mesActual=mesKey();
+
+  function unlock(){sessionStorage.setItem('ft_pin','ok');setUnlocked(true);}
+
+  function guardarCliente(f){
+    let nuevos;
+    if(modal?.cliente){
+      nuevos=clientes.map(c=>c.id===modal.cliente.id?{...c,...f}:c);
+    }else{
+      nuevos=[...clientes,{...f,id:uid()}];
+    }
+    setClientes(nuevos);save(SK,nuevos);setModal(null);
+  }
+
+  function marcarPago(c){
+    const mp={...pagos};
+    if(!mp[mesActual])mp[mesActual]={};
+    if(mp[mesActual][c.id]){
+      // desmarcar
+      delete mp[mesActual][c.id];
+    }else{
+      mp[mesActual][c.id]=new Date().toISOString();
+    }
+    setPagos(mp);save(PK,mp);
+  }
+
+  function eliminarCliente(id){
+    if(!window.confirm('¿Eliminar este cliente? Se perderá su historial de pagos.'))return;
+    const nuevos=clientes.filter(c=>c.id!==id);
+    setClientes(nuevos);save(SK,nuevos);setModal(null);
+  }
+
+  if(!unlocked)return h(PinScreen,{onUnlock:unlock});
+
+  const TABS=[{id:'clientes',l:'Clientes',ic:'👥'},{id:'factura',l:'Facturación',ic:'💰'},{id:'tareas',l:'Tareas',ic:'✅'}];
+  const pendientes=tareas.filter(t=>!t.done).length;
+
+  return h('div',{style:{maxWidth:'480px',margin:'0 auto',background:'#F5F5F5',minHeight:'100vh'}},
+    // Header
+    h('div',{style:{background:'#fff',borderBottom:'1px solid rgba(0,0,0,0.09)',padding:'14px 18px',position:'sticky',top:0,zIndex:10,display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      h('div',null,
+        h('div',{style:{fontSize:'10px',color:'#999',fontWeight:'600',letterSpacing:'0.08em',textTransform:'uppercase'}},'Fuerza T'),
+        h('div',{style:{fontSize:'18px',fontWeight:'800'}},'Gestión')
+      ),
+      tab==='clientes'&&h('button',{onClick:()=>setModal({tipo:'nuevo'}),style:{background:'#111',color:'#fff',border:'none',borderRadius:'8px',padding:'8px 14px',fontSize:'13px',fontWeight:'700',cursor:'pointer'}},'+Cliente')
+    ),
+    // Contenido
+    h('div',{style:{padding:'14px',paddingBottom:'80px'}},
+      tab==='clientes'&&h(Clientes,{clientes,pagos,onAdd:()=>setModal({tipo:'nuevo'}),onEdit:c=>setModal({tipo:'editar',cliente:c}),onPago:marcarPago,mesActual}),
+      tab==='factura'&&h(Facturacion,{clientes,pagos,onPago:marcarPago,mesActual}),
+      tab==='tareas'&&h(Tareas,{clientes,tareas,setTareas})
+    ),
+    // Nav
+    h('div',{style:{background:'#fff',borderTop:'1px solid rgba(0,0,0,0.08)',display:'flex',position:'sticky',bottom:0,zIndex:10}},
+      TABS.map(t=>h('button',{key:t.id,onClick:()=>setTab(t.id),style:{flex:1,padding:'10px 2px 14px',fontSize:'11px',background:'none',border:'none',borderTop:tab===t.id?'2px solid #111':'2px solid transparent',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:'3px',color:tab===t.id?'#111':'#999',fontWeight:tab===t.id?'700':'400',position:'relative'}},
+        h('span',{style:{fontSize:'20px'}},t.ic),
+        t.id==='tareas'&&pendientes>0&&h('span',{style:{position:'absolute',top:'6px',right:'calc(50% - 14px)',background:R,color:'#fff',borderRadius:'10px',fontSize:'9px',fontWeight:'800',padding:'1px 5px',minWidth:'16px',textAlign:'center'}},pendientes),
+        t.l
+      ))
+    ),
+    // Modal
+    modal&&h(Modal,{title:modal.tipo==='nuevo'?'Nuevo cliente':'Editar cliente',onClose:()=>setModal(null)},
+      h(ClienteForm,{
+        inicial:modal.cliente||null,
+        onSave:guardarCliente,
+        onCancel:()=>setModal(null)
+      }),
+      modal.cliente&&h('button',{onClick:()=>eliminarCliente(modal.cliente.id),style:{width:'100%',marginTop:'12px',padding:'12px',background:'#FFF5F5',color:R,border:'1px solid rgba(239,68,68,0.2)',borderRadius:'10px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}},'Eliminar cliente')
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(App,null));
+</script>
+</body>
+</html>
