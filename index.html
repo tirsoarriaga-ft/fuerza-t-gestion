@@ -182,12 +182,44 @@ function Clientes({clientes,pagos,onAdd,onEdit,onPago,mesActual}){
 // ── FACTURACIÓN ───────────────────────────────────────────────────────
 function Facturacion({clientes,pagos,onPago,mesActual}){
   const pagosM=pagos[mesActual]||{};
+  const hoyN=hoy();
   const activos=clientes.filter(c=>c.estado==='Activo'&&parseFloat(c.cuota||0)>0).sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const pagaron=activos.filter(c=>pagosM[c.id]);
-  const deben=activos.filter(c=>!pagosM[c.id]);
+  const noPagaron=activos.filter(c=>!pagosM[c.id]);
+  const morosos=noPagaron.filter(c=>parseInt(c.diaPago)<hoyN);
+  const venceHoy=noPagaron.filter(c=>parseInt(c.diaPago)===hoyN);
+  const porVencer=noPagaron.filter(c=>parseInt(c.diaPago)>hoyN);
   const cobrado=pagaron.reduce((s,c)=>s+parseFloat(c.cuota||0),0);
   const esperado=activos.reduce((s,c)=>s+parseFloat(c.cuota||0),0);
   const pct=esperado>0?Math.round(cobrado/esperado*100):0;
+  const [open,setOpen]=useState({morosos:true,hoy:true,porVencer:false,pagaron:false});
+  const tog=k=>setOpen(p=>({...p,[k]:!p[k]}));
+
+  function Grupo({id,emoji,label,color,lista}){
+    if(!lista.length)return null;
+    return h('div',{style:{marginBottom:'8px'}},
+      h('div',{onClick:()=>tog(id),style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'#fff',borderRadius:open[id]?'12px 12px 0 0':'12px',border:'1px solid rgba(0,0,0,0.09)',cursor:'pointer',userSelect:'none'}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:'8px'}},
+          h('span',null,emoji),
+          h('span',{style:{fontSize:'13px',fontWeight:'700',color}},''+label),
+          h('span',{style:{background:color+'18',color,borderRadius:'20px',padding:'2px 8px',fontSize:'11px',fontWeight:'700'}},lista.length)
+        ),
+        h('span',{style:{fontSize:'11px',color:'#bbb',fontWeight:'700'}},open[id]?'▲':'▼')
+      ),
+      open[id]&&h('div',{style:{border:'1px solid rgba(0,0,0,0.09)',borderTop:'none',borderRadius:'0 0 12px 12px',overflow:'hidden'}},
+        lista.map((c,i)=>h('div',{key:c.id,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderTop:i>0?'1px solid rgba(0,0,0,0.05)':'none',background:'#fff'},onClick:()=>onPago(c)},
+          h('div',null,
+            h('div',{style:{fontWeight:'600',fontSize:'14px'}},c.nombre),
+            h('div',{style:{fontSize:'11px',color:'#999'}},c.plan+' · $'+parseFloat(c.cuota).toLocaleString('es-AR')+(c.diaPago?' · Día '+c.diaPago:''))
+          ),
+          id==='pagaron'
+            ?h('div',{style:{background:'#EAF7F2',color:G,borderRadius:'8px',padding:'5px 10px',fontSize:'11px',fontWeight:'700'}},'✓ Pagó')
+            :h('div',{style:{background:color,color:'#fff',borderRadius:'8px',padding:'5px 10px',fontSize:'11px',fontWeight:'700',cursor:'pointer'}},'Marcar pagado')
+        ))
+      )
+    );
+  }
+
   return h('div',null,
     h('div',{style:{...card,marginBottom:'10px'}},
       h('div',{style:{fontSize:'13px',color:'#999',marginBottom:'2px'}},mesLabel()),
@@ -196,25 +228,19 @@ function Facturacion({clientes,pagos,onPago,mesActual}){
       h('div',{style:{height:'6px',background:'#F0F0F0',borderRadius:'3px'}},
         h('div',{style:{height:'100%',width:pct+'%',background:pct>=80?G:pct>=50?O:R,borderRadius:'3px',transition:'width 0.4s'}})
       ),
-      h('div',{style:{display:'flex',justifyContent:'space-between',marginTop:'8px',fontSize:'12px'}},
-        h('span',{style:{color:G,fontWeight:'700'}},pagaron.length+' pagaron'),
-        h('span',{style:{color:R,fontWeight:'700'}},deben.length+' deben')
+      h('div',{style:{display:'flex',gap:'8px',marginTop:'10px',flexWrap:'wrap'}},
+        [{l:'Morosos',v:morosos.length,c:R},{l:'Vence hoy',v:venceHoy.length,c:O},{l:'Por vencer',v:porVencer.length,c:B},{l:'Pagaron',v:pagaron.length,c:G}].map((m,i)=>
+          h('div',{key:i,style:{flex:1,textAlign:'center',background:m.c+'12',borderRadius:'8px',padding:'6px 4px',minWidth:'60px'}},
+            h('div',{style:{fontSize:'18px',fontWeight:'800',color:m.c}},m.v),
+            h('div',{style:{fontSize:'9px',color:m.c,fontWeight:'600'}},m.l)
+          )
+        )
       )
     ),
-    deben.length>0&&h('div',null,
-      h('div',{style:{fontSize:'12px',fontWeight:'700',color:'#999',marginBottom:'6px',letterSpacing:'0.06em'}},'PENDIENTES'),
-      deben.map(c=>h('div',{key:c.id,style:{...card,display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'},onClick:()=>onPago(c)},
-        h('div',null,h('div',{style:{fontWeight:'700',fontSize:'14px'}},c.nombre),h('div',{style:{fontSize:'11px',color:'#999'}},c.plan+' · $'+parseFloat(c.cuota).toLocaleString('es-AR')+' · Día '+c.diaPago)),
-        h('div',{style:{background:R,color:'#fff',borderRadius:'8px',padding:'6px 12px',fontSize:'12px',fontWeight:'700'}},'Marcar pagado')
-      ))
-    ),
-    pagaron.length>0&&h('div',null,
-      h('div',{style:{fontSize:'12px',fontWeight:'700',color:'#999',marginBottom:'6px',letterSpacing:'0.06em',marginTop:'10px'}},'PAGARON'),
-      pagaron.map(c=>h('div',{key:c.id,style:{...card,display:'flex',justifyContent:'space-between',alignItems:'center',opacity:0.7},onClick:()=>onPago(c)},
-        h('div',null,h('div',{style:{fontWeight:'700',fontSize:'14px'}},c.nombre),h('div',{style:{fontSize:'11px',color:'#999'}},c.plan+' · $'+parseFloat(c.cuota).toLocaleString('es-AR')+' · '+new Date(pagosM[c.id]).toLocaleDateString('es-AR'))),
-        h('div',{style:{background:'#EAF7F2',color:G,borderRadius:'8px',padding:'6px 12px',fontSize:'12px',fontWeight:'700'}},'✓ Pagó')
-      ))
-    )
+    h(Grupo,{id:'morosos',emoji:'🔴',label:'Morosos',color:R,lista:morosos}),
+    h(Grupo,{id:'hoy',emoji:'⚡',label:'Vence hoy',color:O,lista:venceHoy}),
+    h(Grupo,{id:'porVencer',emoji:'⏳',label:'Por vencer',color:B,lista:porVencer}),
+    h(Grupo,{id:'pagaron',emoji:'✓',label:'Pagaron',color:G,lista:pagaron})
   );
 }
 
