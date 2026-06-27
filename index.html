@@ -137,6 +137,21 @@ function Clientes({clientes,pagos,onAdd,onEdit,onPago,mesActual}){
         h('div',{key:i,style:{...card,marginBottom:0,textAlign:'center'}},h('div',{style:{fontSize:'15px',fontWeight:'800',color:m.c}},m.v),h('div',{style:{fontSize:'10px',color:'#999',marginTop:'3px'}},m.l))
       )
     ),
+    (()=>{
+      const pausados=clientes.filter(c=>c.estado==='Pausado');
+      const prospectos=clientes.filter(c=>c.estado==='Prospecto');
+      if(!pausados.length&&!prospectos.length)return null;
+      return h('div',{style:{...card,background:'#F8F4FF',border:'1px solid rgba(124,58,237,0.2)',marginBottom:'10px'}},
+        prospectos.length>0&&h('div',{style:{marginBottom:pausados.length?'8px':0}},
+          h('div',{style:{fontSize:'11px',fontWeight:'700',color:'#7C3AED',marginBottom:'4px'}},'🌱 PROSPECTOS ('+prospectos.length+') — potenciales clientes'),
+          h('div',{style:{fontSize:'13px',color:'#555'}},prospectos.map(c=>c.nombre).join(' · '))
+        ),
+        pausados.length>0&&h('div',null,
+          h('div',{style:{fontSize:'11px',fontWeight:'700',color:'#6B7280',marginBottom:'4px'}},'⏸ PAUSADOS ('+pausados.length+') — pueden retomar'),
+          h('div',{style:{fontSize:'13px',color:'#555'}},pausados.map(c=>c.nombre).join(' · '))
+        )
+      );
+    })(),
     vencenHoy.length>0&&h('div',{style:{...card,background:'#FEF3C7',border:'1px solid #F59E0B',marginBottom:'10px'}},
       h('div',{style:{fontSize:'12px',fontWeight:'700',color:'#92400E'}},'⚠️ Vencen hoy: '+vencenHoy.map(c=>c.nombre).join(', '))
     ),
@@ -304,6 +319,61 @@ function Tareas({clientes,tareas,setTareas}){
 }
 
 // ── APP ───────────────────────────────────────────────────────────────
+function Historial({clientes,pagos}){
+  const [mesSel,setMesSel]=useState(null);
+  const meses=useMemo(()=>{
+    const keys=Object.keys(pagos).sort().reverse();
+    return keys.map(k=>{
+      const pagosM=pagos[k]||{};
+      const pagaron=clientes.filter(c=>pagosM[c.id]);
+      const cobrado=pagaron.reduce((s,c)=>s+parseFloat(c.cuota||0),0);
+      const noPagaron=clientes.filter(c=>!pagosM[c.id]&&c.estado!=='Baja'&&c.estado!=='Prospecto');
+      const [yr,mo]=k.split('-');
+      const label=new Date(parseInt(yr),parseInt(mo)-1,1).toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+      return{key:k,label,cobrado,pagaron,noPagaron,pagosM};
+    });
+  },[pagos,clientes]);
+
+  if(meses.length===0)return h('div',{style:{...card,textAlign:'center',padding:'32px'}},h('div',{style:{fontSize:'30px',marginBottom:'8px'}},'📅'),h('div',{style:{fontSize:'14px',color:'#999'}},'Aún no hay meses cerrados'));
+
+  return h('div',null,
+    meses.map(m=>{
+      const sel=mesSel===m.key;
+      return h('div',{key:m.key,style:card},
+        h('div',{onClick:()=>setMesSel(sel?null:m.key),style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}},
+          h('div',null,
+            h('div',{style:{fontSize:'13px',color:'#999',marginBottom:'2px'}},m.label),
+            h('div',{style:{fontSize:'22px',fontWeight:'900',color:G}},'$'+m.cobrado.toLocaleString('es-AR')),
+            h('div',{style:{display:'flex',gap:'10px',marginTop:'4px',fontSize:'12px'}},
+              h('span',{style:{color:G,fontWeight:'700'}},m.pagaron.length+' pagaron'),
+              m.noPagaron.length>0&&h('span',{style:{color:R,fontWeight:'700'}},m.noPagaron.length+' no pagaron')
+            )
+          ),
+          h('span',{style:{fontSize:'16px',color:'#ccc',fontWeight:'700'}},sel?'▲':'▼')
+        ),
+        sel&&h('div',{style:{marginTop:'12px',borderTop:'1px solid rgba(0,0,0,0.06)',paddingTop:'12px'}},
+          m.noPagaron.length>0&&h('div',{style:{marginBottom:'10px'}},
+            h('div',{style:{fontSize:'11px',fontWeight:'700',color:R,marginBottom:'6px',letterSpacing:'0.06em'}},'NO PAGARON / PAUSADOS'),
+            m.noPagaron.map(c=>h('div',{key:c.id,style:{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid rgba(0,0,0,0.04)',fontSize:'13px'}},
+              h('span',null,c.nombre,' ',h('span',{style:{fontSize:'10px',color:'#999'}},c.estado==='Pausado'?'(pausado)':'')),
+              h('span',{style:{color:'#999'}},'$'+parseFloat(c.cuota||0).toLocaleString('es-AR'))
+            ))
+          ),
+          m.pagaron.length>0&&h('div',null,
+            h('div',{style:{fontSize:'11px',fontWeight:'700',color:G,marginBottom:'6px',letterSpacing:'0.06em'}},'PAGARON'),
+            m.pagaron.map(c=>h('div',{key:c.id,style:{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid rgba(0,0,0,0.04)',fontSize:'13px'}},
+              h('span',null,c.nombre),
+              h('div',{style:{textAlign:'right'}},
+                h('div',{style:{fontWeight:'700',color:G}},'$'+parseFloat(c.cuota||0).toLocaleString('es-AR')),
+                h('div',{style:{fontSize:'10px',color:'#ccc'}},new Date(m.pagosM[c.id]).toLocaleDateString('es-AR'))
+              )
+            ))
+          )
+        )
+      );
+    })
+  );
+}
 function App(){
   const [unlocked,setUnlocked]=useState(()=>sessionStorage.getItem('ft_pin')==='ok');
   const [tab,setTab]=useState('clientes');
@@ -345,7 +415,7 @@ function App(){
 
   if(!unlocked)return h(PinScreen,{onUnlock:unlock});
 
-  const TABS=[{id:'clientes',l:'Clientes',ic:'👥'},{id:'factura',l:'Facturación',ic:'💰'},{id:'tareas',l:'Tareas',ic:'✅'}];
+  const TABS=[{id:'clientes',l:'Clientes',ic:'👥'},{id:'factura',l:'Facturación',ic:'💰'},{id:'tareas',l:'Tareas',ic:'✅'},{id:'historial',l:'Historial',ic:'📅'}];
   const pendientes=tareas.filter(t=>!t.done).length;
 
   return h('div',{style:{maxWidth:'480px',margin:'0 auto',background:'#F5F5F5',minHeight:'100vh'}},
@@ -361,7 +431,8 @@ function App(){
     h('div',{style:{padding:'14px',paddingBottom:'80px'}},
       tab==='clientes'&&h(Clientes,{clientes,pagos,onAdd:()=>setModal({tipo:'nuevo'}),onEdit:c=>setModal({tipo:'editar',cliente:c}),onPago:marcarPago,mesActual}),
       tab==='factura'&&h(Facturacion,{clientes,pagos,onPago:marcarPago,mesActual}),
-      tab==='tareas'&&h(Tareas,{clientes,tareas,setTareas})
+      tab==='tareas'&&h(Tareas,{clientes,tareas,setTareas}),
+      tab==='historial'&&h(Historial,{clientes,pagos})
     ),
     // Nav
     h('div',{style:{background:'#fff',borderTop:'1px solid rgba(0,0,0,0.08)',display:'flex',position:'sticky',bottom:0,zIndex:10}},
