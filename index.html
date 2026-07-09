@@ -211,6 +211,7 @@ function Facturacion({clientes,pagos,onPago,mesActual}){
   const tog=k=>setOpen(p=>({...p,[k]:!p[k]}));
 
   const [rowOpen,setRowOpen]=useState({});
+  const [rowDia,setRowDia]=useState({});
   const togRow=id=>setRowOpen(p=>({...p,[id]:!p[id]}));
 
   function Grupo({id,emoji,label,color,lista}){
@@ -254,11 +255,11 @@ function Facturacion({clientes,pagos,onPago,mesActual}){
               ),
               h('div',{style:{fontSize:'10px',fontWeight:'700',color:'#999',marginBottom:'6px',letterSpacing:'0.06em'}},'CAMBIAR DÍA DE PAGO'),
               h('div',{style:{display:'flex',gap:'6px',alignItems:'center'}},
-                h('input',{type:'number',min:'1',max:'31',defaultValue:c.diaPago||'',placeholder:'Día 1-31',
-                  id:'dp_'+c.id,
+                h('input',{type:'number',min:'1',max:'31',value:rowDia[c.id]??c.diaPago??'',placeholder:'Día 1-31',
+                  onChange:e=>setRowDia(p=>({...p,[c.id]:e.target.value})),
                   style:{flex:1,padding:'8px',border:'1px solid rgba(0,0,0,0.1)',borderRadius:'8px',fontSize:'13px'}}),
                 h('button',{onClick:()=>{
-                  const val=document.getElementById('dp_'+c.id)?.value;
+                  const val=rowDia[c.id];
                   if(!val)return;
                   const updated=clientes.map(cl=>cl.id===c.id?{...cl,diaPago:parseInt(val)}:cl);
                   setClientes(updated);localStorage.setItem('ft_clientes',JSON.stringify(updated));
@@ -356,7 +357,7 @@ function Tareas({clientes,tareas,setTareas}){
 }
 
 // ── APP ───────────────────────────────────────────────────────────────
-function Historial({clientes,pagos}){
+function Historial({clientes,pagos,setPagos}){
   const [mesSel,setMesSel]=useState(null);
   const meses=useMemo(()=>{
     const keys=Object.keys(pagos).sort().reverse();
@@ -370,6 +371,15 @@ function Historial({clientes,pagos}){
       return{key:k,label,cobrado,pagaron,noPagaron,pagosM};
     });
   },[pagos,clientes]);
+
+  function togglePago(mesKey,cliente){
+    const mesData={...pagos[mesKey]||{}};
+    if(mesData[cliente.id])delete mesData[cliente.id];
+    else mesData[cliente.id]=new Date().toISOString();
+    const newPagos={...pagos,[mesKey]:mesData};
+    setPagos(newPagos);
+    localStorage.setItem('ft_pagos',JSON.stringify(newPagos));
+  }
 
   if(meses.length===0)return h('div',{style:{...card,textAlign:'center',padding:'32px'}},h('div',{style:{fontSize:'30px',marginBottom:'8px'}},'📅'),h('div',{style:{fontSize:'14px',color:'#999'}},'Aún no hay meses cerrados'));
 
@@ -389,23 +399,20 @@ function Historial({clientes,pagos}){
           h('span',{style:{fontSize:'16px',color:'#ccc',fontWeight:'700'}},sel?'▲':'▼')
         ),
         sel&&h('div',{style:{marginTop:'12px',borderTop:'1px solid rgba(0,0,0,0.06)',paddingTop:'12px'}},
-          m.noPagaron.length>0&&h('div',{style:{marginBottom:'10px'}},
-            h('div',{style:{fontSize:'11px',fontWeight:'700',color:R,marginBottom:'6px',letterSpacing:'0.06em'}},'NO PAGARON / PAUSADOS'),
-            m.noPagaron.map(c=>h('div',{key:c.id,style:{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid rgba(0,0,0,0.04)',fontSize:'13px'}},
-              h('span',null,c.nombre,' ',h('span',{style:{fontSize:'10px',color:'#999'}},c.estado==='Pausado'?'(pausado)':'')),
-              h('span',{style:{color:'#999'}},'$'+parseFloat(c.cuota||0).toLocaleString('es-AR'))
-            ))
-          ),
-          m.pagaron.length>0&&h('div',null,
-            h('div',{style:{fontSize:'11px',fontWeight:'700',color:G,marginBottom:'6px',letterSpacing:'0.06em'}},'PAGARON'),
-            m.pagaron.map(c=>h('div',{key:c.id,style:{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid rgba(0,0,0,0.04)',fontSize:'13px'}},
-              h('span',null,c.nombre),
-              h('div',{style:{textAlign:'right'}},
-                h('div',{style:{fontWeight:'700',color:G}},'$'+parseFloat(c.cuota||0).toLocaleString('es-AR')),
-                h('div',{style:{fontSize:'10px',color:'#ccc'}},new Date(m.pagosM[c.id]).toLocaleDateString('es-AR'))
-              )
-            ))
-          )
+          h('div',{style:{fontSize:'10px',fontWeight:'700',color:'#888',marginBottom:'8px',letterSpacing:'0.08em'}},'EDITAR MES — tocá para cambiar estado'),
+          [...m.pagaron,...m.noPagaron].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>{
+            const pago=!!m.pagosM[c.id];
+            return h('div',{key:c.id,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid rgba(0,0,0,0.04)'}},
+              h('div',null,
+                h('span',{style:{fontSize:'13px',fontWeight:'600',color:'#0A0A0A'}},c.nombre),
+                !pago&&c.estado==='Pausado'&&h('span',{style:{fontSize:'10px',color:'#999',marginLeft:'6px'}},'(pausado)')
+              ),
+              h('button',{onClick:()=>togglePago(m.key,c),style:{
+                padding:'5px 12px',fontSize:'11px',fontWeight:'700',cursor:'pointer',borderRadius:'8px',border:'none',
+                background:pago?'#EAF7F2':R+'18',color:pago?G:R
+              }},pago?'✓ Pagó':'No pagó')
+            );
+          })
         )
       );
     })
@@ -469,7 +476,7 @@ function App(){
       tab==='clientes'&&h(Clientes,{clientes,pagos,onAdd:()=>setModal({tipo:'nuevo'}),onEdit:c=>setModal({tipo:'editar',cliente:c}),onPago:marcarPago,mesActual}),
       tab==='factura'&&h(Facturacion,{clientes,pagos,onPago:marcarPago,mesActual}),
       tab==='tareas'&&h(Tareas,{clientes,tareas,setTareas}),
-      tab==='historial'&&h(Historial,{clientes,pagos})
+      tab==='historial'&&h(Historial,{clientes,pagos,setPagos})
     ),
     // Nav
     h('div',{style:{background:'#fff',borderTop:'1px solid rgba(0,0,0,0.08)',display:'flex',position:'sticky',bottom:0,zIndex:10}},
