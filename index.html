@@ -248,22 +248,31 @@ function Facturacion({clientes,setClientes,pagos,onPago,mesActual}){
                 ['Activo','Pausado','Prospecto','Baja'].map(est=>
                   h('button',{key:est,onClick:()=>{
                     const updated=clientes.map(cl=>cl.id===c.id?{...cl,estado:est}:cl);
-                    setClientes(updated);localStorage.setItem('ft_clientes',JSON.stringify(updated));
+                    setClientes(updated);
+                    localStorage.setItem('ft_clientes',JSON.stringify(updated));
                     togRow(c.id);
                   },style:{padding:'7px',fontSize:'11px',fontWeight:c.estado===est?'800':'400',cursor:'pointer',borderRadius:'8px',border:'1px solid rgba(0,0,0,0.1)',background:c.estado===est?'#111':'#fff',color:c.estado===est?'#fff':'#555'}},est)
                 )
               ),
               h('div',{style:{fontSize:'10px',fontWeight:'700',color:'#999',marginBottom:'6px',letterSpacing:'0.06em'}},'CAMBIAR DÍA DE PAGO'),
               h('div',{style:{display:'flex',gap:'6px',alignItems:'center'}},
-                h('input',{type:'number',min:'1',max:'31',value:rowDia[c.id]??c.diaPago??'',placeholder:'Día 1-31',
-                  onChange:e=>setRowDia(p=>({...p,[c.id]:e.target.value})),
-                  style:{flex:1,padding:'8px',border:'1px solid rgba(0,0,0,0.1)',borderRadius:'8px',fontSize:'13px'}}),
+                h('input',{
+                  type:'number',min:'1',max:'31',
+                  defaultValue:c.diaPago||'',
+                  placeholder:'Día 1-31',
+                  id:'input_dia_'+c.id,
+                  style:{flex:1,padding:'8px',border:'1px solid rgba(0,0,0,0.1)',borderRadius:'8px',fontSize:'13px'}
+                }),
                 h('button',{onClick:()=>{
-                  const val=rowDia[c.id];
-                  if(!val)return;
-                  const updated=clientes.map(cl=>cl.id===c.id?{...cl,diaPago:parseInt(val)}:cl);
-                  setClientes(updated);localStorage.setItem('ft_clientes',JSON.stringify(updated));
+                  const inputEl=document.getElementById('input_dia_'+c.id);
+                  const val=inputEl?inputEl.value:'';
+                  if(!val||isNaN(parseInt(val)))return;
+                  const dia=Math.min(31,Math.max(1,parseInt(val)));
+                  const updated=clientes.map(cl=>cl.id===c.id?{...cl,diaPago:dia}:cl);
+                  setClientes(updated);
+                  localStorage.setItem('ft_clientes',JSON.stringify(updated));
                   togRow(c.id);
+                  alert('Día de pago actualizado a '+dia);
                 },style:{background:G,color:'#fff',border:'none',borderRadius:'8px',padding:'8px 12px',fontSize:'12px',fontWeight:'700',cursor:'pointer'}},'Guardar')
               )
             )
