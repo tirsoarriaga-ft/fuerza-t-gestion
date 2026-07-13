@@ -290,10 +290,10 @@ function Facturacion({clientes,pagos,onPago,mesActual}){
         )
       )
     ),
-    h(Grupo,{id:'morosos',emoji:'🔴',label:'Morosos',color:R,lista:morosos}),
-    h(Grupo,{id:'hoy',emoji:'⚡',label:'Vence hoy',color:O,lista:venceHoy}),
-    h(Grupo,{id:'porVencer',emoji:'⏳',label:'Por vencer',color:B,lista:porVencer}),
-    h(Grupo,{id:'pagaron',emoji:'✓',label:'Pagaron',color:G,lista:pagaron})
+    Grupo({id:'morosos',emoji:'🔴',label:'Morosos',color:R,lista:morosos}),
+    Grupo({id:'hoy',emoji:'⚡',label:'Vence hoy',color:O,lista:venceHoy}),
+    Grupo({id:'porVencer',emoji:'⏳',label:'Por vencer',color:B,lista:porVencer}),
+    Grupo({id:'pagaron',emoji:'✓',label:'Pagaron',color:G,lista:pagaron})
   );
 }
 
