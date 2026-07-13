@@ -195,7 +195,7 @@ function Clientes({clientes,pagos,onAdd,onEdit,onPago,mesActual}){
 }
 
 // ── FACTURACIÓN ───────────────────────────────────────────────────────
-function Facturacion({clientes,pagos,onPago,mesActual}){
+function Facturacion({clientes,setClientes,pagos,onPago,mesActual}){
   const pagosM=pagos[mesActual]||{};
   const hoyN=hoy();
   const activos=clientes.filter(c=>c.estado==='Activo'&&parseFloat(c.cuota||0)>0).sort((a,b)=>a.nombre.localeCompare(b.nombre));
@@ -474,7 +474,7 @@ function App(){
     // Contenido
     h('div',{style:{padding:'14px',paddingBottom:'80px'}},
       tab==='clientes'&&h(Clientes,{clientes,pagos,onAdd:()=>setModal({tipo:'nuevo'}),onEdit:c=>setModal({tipo:'editar',cliente:c}),onPago:marcarPago,mesActual}),
-      tab==='factura'&&h(Facturacion,{clientes,pagos,onPago:marcarPago,mesActual}),
+      tab==='factura'&&h(Facturacion,{clientes,setClientes,pagos,onPago:marcarPago,mesActual}),
       tab==='tareas'&&h(Tareas,{clientes,tareas,setTareas}),
       tab==='historial'&&h(Historial,{clientes,pagos,setPagos})
     ),
